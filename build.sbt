@@ -23,6 +23,7 @@ lazy val commonSettings = Seq(
   libraryDependencies += "org.typelevel" %% "spire" % "0.16.2",
   libraryDependencies += "org.scalanlp" %% "breeze" % "1.0",
   addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full),
+  libraryDependencies += "edu.berkeley.cs" %% "chiseltest" % "0.2.1",
   unmanagedBase := (chipyardRoot / unmanagedBase).value,
   allDependencies := allDependencies.value.filterNot(_.organization == "edu.berkeley.cs"),
   exportJars := true,
@@ -102,6 +103,16 @@ lazy val chisel_testers = (project in file("tools/chisel-testers"))
       )
     )
 
+lazy val chiseltest = (project in file("tools/chiseltest"))
+  .dependsOn(chisel, firrtl_interpreter, treadle)
+  .settings(
+    commonSettings,
+    libraryDependencies ++= Seq(
+      "org.scalatest" %% "scalatest" % "3.0.8",
+      "com.lihaoyi" %% "utest" % "latest.integration"
+    )
+  )
+
 // Contains annotations & firrtl passes you may wish to use in rocket-chip without
 // introducing a circular dependency between RC and MIDAS
 lazy val midasTargetUtils = ProjectRef(firesimDir, "targetutils")
@@ -147,7 +158,7 @@ lazy val icenet = (project in file("generators/icenet"))
   .settings(commonSettings)
 
 lazy val dla = (project in file("generators/dla"))
-  .dependsOn(rocketchip, testchipip, icenet)
+  .dependsOn(rocketchip, testchipip, icenet, chiseltest, chisel_testers)
   .settings(commonSettings)
 
 lazy val hwacha = (project in file("generators/hwacha"))

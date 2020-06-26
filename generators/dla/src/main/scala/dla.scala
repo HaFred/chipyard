@@ -1,4 +1,4 @@
-package dla
+package dla.pe
 
 import chisel3._
 import chisel3.util._
@@ -28,7 +28,7 @@ class RoCCIceDMA(opcode: OpcodeSet, val regBufferNum: Int = 1024)(implicit p: Pa
     val len = RegInit(0.U(64.W))
     val nbytes = len << 3.U
     val baseAdr = RegInit(0.U(64.W))
-    val direction = RegInit(0.U(3.W))  // f: if direction got 0 means wrong
+    val direction = RegInit(0.U(3.W))  // f: if direction got 0 default, means wrong
     val busy = RegInit(false.B)
     // DMA Read
     val dmaReaderIO = dmaReader.module.io // icenet DMA read port
@@ -38,6 +38,8 @@ class RoCCIceDMA(opcode: OpcodeSet, val regBufferNum: Int = 1024)(implicit p: Pa
     val dmaWriterIO = dmaWriter.module.io
     val canWrite = busy && (direction===2.U)
     val wRestReqValid = RegInit(false.B)
+    val M_XRD = "b0".asUInt(1.W) // int load
+    val M_XWR = "b1".asUInt(1.W) // int store
 
     // RoCC instructions decoding
     io.cmd.ready := !busy
@@ -64,6 +66,7 @@ class RoCCIceDMA(opcode: OpcodeSet, val regBufferNum: Int = 1024)(implicit p: Pa
     dmaReaderIO.req.bits.partial := false.B
     dmaReaderIO.out.ready := (i < len) && canRead  // assume out.ready is inputted as this statement
     buffer(i) := dmaReaderIO.out.bits.data
+//    debugIO.outdata := buffer(i)
     when(dmaReaderIO.out.fire()){
       i := i + 1.U
     }
@@ -95,7 +98,7 @@ class RoCCIceDMA(opcode: OpcodeSet, val regBufferNum: Int = 1024)(implicit p: Pa
     val enCacheW = busy && (direction === 4.U) && (i < len)
 
     memReq.valid := (enCacheR || enCacheW) && (state === s_idle)
-    memReq.bits.cmd := Mux(enCacheW, canWrite, canRead)
+    memReq.bits.cmd := Mux(enCacheW, M_XWR, M_XRD)
     memReq.bits.addr := baseAdr
     memReq.bits.size := log2Ceil(64).U
     memReq.bits.data := buffer(i)
@@ -121,8 +124,56 @@ class WithRoCCIceDMA extends Config((site, here, up) => {
   case BuildRoCC => Seq(
     (p:Parameters) => {
       val regBufferNum = 4096 // Reg width
-      val roccdma = LazyModule (new RoCCIceDMA(OpcodeSet.all, regBufferNum)(p))
+      val roccdma = LazyModule (new RoCCIceDMA(OpcodeSet.custom0, regBufferNum)(p))
       roccdma
     }
   )
 })
+
+//object RealGCD2 {
+//  val num_width = 16
+//}
+//
+//class RealGCDInput extends Bundle {
+//  private val theWidth = RealGCD.num_width
+//  val a = UInt(theWidth.W)
+//  val b = UInt(theWidth.W)
+//}
+//
+//class RealGCD extends Module {
+//  private val theWidth = RealGCD.num_width
+//  val io  = IO(new Bundle {
+//    val in  = Flipped(Decoupled(new RealGCDInput()))
+//    val out = Valid(UInt(theWidth.W))
+//  })
+//
+//  val x = Reg(UInt(theWidth.W))
+//  val y = Reg(UInt(theWidth.W))
+//  val p = RegInit(false.B)
+//
+//  val ti = RegInit(0.U(theWidth.W))
+//  ti := ti + 1.U
+//
+//  io.in.ready := !p
+//
+//  when (io.in.valid && !p) {
+//    x := io.in.bits.a
+//    y := io.in.bits.b
+//    p := true.B
+//  }
+//
+//  when (p) {
+//    when (x > y)  { x := y; y := x }
+//      .otherwise    { y := y - x }
+//  }
+//
+//  printf("ti %d  x %d y %d  in_ready %d  in_valid %d  out %d  out_ready %d  out_valid %d==============\n",
+//    ti, x, y, io.in.ready, io.in.valid, io.out.bits, 0.U, io.out.valid)
+//  //      ti, x, y, io.in.ready, io.in.valid, io.out.bits, io.out.ready, io.out.valid)
+//
+//  io.out.bits  := x
+//  io.out.valid := y === 0.U && p
+//  when (io.out.valid) {
+//    p := false.B
+//  }
+//}
